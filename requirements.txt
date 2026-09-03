@@ -1,0 +1,6 @@
+gradio
+langchain
+langchain-community
+langchain-nvidia-ai-endpoints
+langchain-text-splitters
+faiss-cpu
