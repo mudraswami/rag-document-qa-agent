@@ -28,7 +28,21 @@ The application takes a PDF, finds the relevant information for a question, and 
 - PyPDF
 
 ## How It Works
+## Architecture
 
+```mermaid
+flowchart LR
+    A[PDF Document] --> B[Text Extraction]
+    B --> C[Text Chunking]
+    C --> D[Embeddings]
+    D --> E[FAISS Vector Store]
+
+    Q[User Question] --> F[Retriever]
+    E --> F
+    F --> G[Relevant Context]
+    G --> H[LLM]
+    H --> I[Answer]
+```
 PDF  
 ↓  
 Text Extraction  
