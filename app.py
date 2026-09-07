@@ -1,6 +1,7 @@
 import os
 import gradio as gr
 
+from pypdf import PdfReader
 from langchain_nvidia_ai_endpoints import ChatNVIDIA, NVIDIAEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -50,77 +51,125 @@ Answer:
 )
 
 
-def answer_question(document, question):
+def answer_question(pdf_file, question):
 
-    if not document.strip():
-        return "Please provide a document."
+    try:
+        if pdf_file is None:
+            return "Please upload a PDF first.", ""
 
-    if not question.strip():
-        return "Please enter a question."
+        if not question.strip():
+            return "Please enter a question.", ""
 
-    # 1. Split document into chunks
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100
-    )
+        reader = PdfReader(pdf_file)
 
-    chunks = splitter.create_documents([document])
+        text = ""
 
-    # 2. Create vector store
-    vectorstore = FAISS.from_documents(
-        chunks,
-        embeddings
-    )
+        for page in reader.pages:
+            page_text = page.extract_text()
 
-    # 3. Retrieve relevant chunks
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 3}
-    )
+            if page_text:
+                text += page_text + "\n"
 
-    documents = retriever.invoke(question)
+        if not text.strip():
+            return "Could not extract text from this PDF.", ""
 
-    context = "\n\n".join(
-        doc.page_content for doc in documents
-    )
+        # Split document into chunks
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=50
+        )
 
-    # 4. Generate answer
-    formatted_prompt = prompt.invoke(
-        {
-            "context": context,
-            "question": question
-        }
-    )
+        chunks = splitter.create_documents([text])
 
-    response = llm.invoke(formatted_prompt)
+        if not chunks:
+            return "No usable content was found in the PDF.", ""
 
-    return response.content
+        # Create vector store
+        vectorstore = FAISS.from_documents(
+            chunks,
+            embeddings
+        )
+
+        # Retrieve relevant chunks
+        retriever = vectorstore.as_retriever(
+            search_kwargs={"k": 2}
+        )
+
+        documents = retriever.invoke(question)
+
+        if not documents:
+            return "I could not find relevant information in the document.", ""
+
+        context = "\n\n".join(
+            doc.page_content for doc in documents
+        )
+
+        # Generate answer
+        formatted_prompt = prompt.invoke(
+            {
+                "context": context,
+                "question": question
+            }
+        )
+
+        response = llm.invoke(formatted_prompt)
+
+        return response.content, context
+
+    except Exception as e:
+        return f"Something went wrong: {str(e)}", ""
 
 
 # Gradio interface
-demo = gr.Interface(
-    fn=answer_question,
-    inputs=[
-        gr.Textbox(
-            label="Document",
-            lines=15,
-            placeholder="Paste your document here..."
-        ),
-        gr.Textbox(
-            label="Question",
-            placeholder="Ask a question about the document..."
-        )
-    ],
-    outputs=gr.Textbox(
-        label="Answer",
-        lines=8
-    ),
-    title="RAG Document Q&A Agent",
-    description=(
-        "Ask questions about a document using "
-        "Retrieval-Augmented Generation (RAG)."
+with gr.Blocks() as demo:
+
+    gr.Markdown("# RAG Document Q&A Agent")
+    gr.Markdown(
+        "Upload a PDF and ask questions about its content."
     )
-)
+
+    with gr.Row():
+
+        with gr.Column():
+
+            pdf_file = gr.File(
+                label="Upload PDF",
+                file_types=[".pdf"]
+            )
+
+            question = gr.Textbox(
+                label="Ask a question",
+                placeholder="Enter your question here..."
+            )
+
+            submit_btn = gr.Button(
+                "Submit",
+                variant="primary"
+            )
+
+            clear_btn = gr.ClearButton()
+
+        with gr.Column():
+
+            answer = gr.Textbox(
+                label="Answer",
+                lines=6
+            )
+
+            context = gr.Textbox(
+                label="Retrieved Context",
+                lines=10
+            )
+
+    submit_btn.click(
+        fn=answer_question,
+        inputs=[pdf_file, question],
+        outputs=[answer, context]
+    )
+
+    clear_btn.add(
+        [pdf_file, question, answer, context]
+    )
 
 
-if __name__ == "__main__":
-    demo.launch()
+demo.launch()
