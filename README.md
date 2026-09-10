@@ -69,15 +69,10 @@ Answer
 
 ## Testing
 
-I tested the application with a sample PDF and asked questions about:
+I tested the application with different PDF documents and asked questions based on their content.
 
-- Beneficiary details
-- Bank account verification
-- What happens when verification fails
-- Required bank account information
-- Beneficiary bank account name verification
+The application returned relevant answers along with the retrieved document context.
 
-The application returned relevant answers and the retrieved document context.
 
 ## Project Files
 
